@@ -18,16 +18,6 @@ parser.add_argument("--d", type=float, default=0.15)  # hicks law param d
 parser.add_argument("--E", type=float, default=0.04)  # probability of inputting a wrong letter
 parser.add_argument("--target_word", type=str, default="apple")  # word that user has to type
 
-args = parser.parse_args()
-
-if args.random_seed is not None:
-    NP_SEED = args.random_seed
-    np.random.seed(NP_SEED)
-else:
-    NP_SEED = None
-
-TARGET_WORD = args.target_word
-
 
 def np_random_sampler(p):
     return np.random.rand() < p
@@ -49,9 +39,18 @@ def print_row(t, key, result):
     print(f"{t:.2f}\t{key}\t{result}")
 
 
-if __name__ == "__main__":
+def simulate(args, suppress_output=False):
+    if args.random_seed is not None:
+        NP_SEED = args.random_seed
+        np.random.seed(NP_SEED)
+    else:
+        NP_SEED = None
+
+    TARGET_WORD = args.target_word
+
     t = 0.0
-    print("Time\tTarget\tResult")
+    if not suppress_output:
+        print("Time\tTarget\tResult")
 
     error = False
     replan = True  # set to true initially so the initial planning goes through
@@ -59,8 +58,8 @@ if __name__ == "__main__":
     ac_successful = False
 
     i = 0
-    while i < len(TARGET_WORD):
-        ch = TARGET_WORD[i]
+    while i < len(args.target_word):
+        ch = args.target_word[i]
 
         # if we need to initialize (during first keystroke or after an error) add latencies
         # for perceiving existing symbols and planning next keystrokes
@@ -92,7 +91,8 @@ if __name__ == "__main__":
             # now we need to actually press the backspace key. this op is assumed error free
             t += fitts_time(args.a, args.b, args.K)
             # log the event because it is observable
-            print_row(t, "BS", "success")
+            if not suppress_output:
+                print_row(t, "BS", "success")
             # we didnt make any progress, but we amended the error. unset the error flag
             error = False
             # before the next cycles starts we will need to replan, so set the replan flag
@@ -131,9 +131,10 @@ if __name__ == "__main__":
             else:
                 t += dt_auto
                 # autocomplete action is visible, log it
-                print_row(t, "AC", "success")
+                if not suppress_output:
+                    print_row(t, "AC", "success")
                 # autocomplete means we are good to leave & finish simulation
-                break
+                return t
         # if ac is either not successful or not valid, we will end up typing anyway so just type
         else:
             t += fitts_time(args.a, args.b, args.K)
@@ -141,7 +142,8 @@ if __name__ == "__main__":
         if np_random_sampler(args.E):
             # the typed event was wrong, but the perceptual system hasnt picked up on that yet
             # still, it is observable so we log the event
-            print_row(t, ch, "fail")
+            if not suppress_output:
+                print_row(t, ch, "fail")
             # set the error flag so next cycle we can account for perceiving and correcting
             error = True
 
@@ -155,8 +157,10 @@ if __name__ == "__main__":
             # # -> if we typed faster than we got the autocomplete suggestion, the autocomplete resets and starts anew
             # # we can be in this codepath only if the AC was unsuccessful or slower than the typing speed so this
             # # effectively implements Q7
-            # ac_successful = np_random_sampler(p_ac_success(args.N, i))
-            # mark autocomplete valid
+            # # add 1 to i because we typed one more letter
+            # ac_successful = np_random_sampler(p_ac_success(args.N, i + 1))
+            # # mark autocomplete valid
+            # ac_valid = True
             # >>>>>>>>>>>>>> ORIGINAL IMPLEMENTATION
 
             # but we will go with invalidating the autocomplete suggestions. that makes more sense because
@@ -166,7 +170,8 @@ if __name__ == "__main__":
         # if we didnt make a mistake
         else:
             # the correct letter being typed is observable, log the event
-            print_row(t, ch, "success")
+            if not suppress_output:
+                print_row(t, ch, "success")
             # we made progress
             i += 1
             # update the autocomplete suggestions for next iteration
@@ -181,3 +186,19 @@ if __name__ == "__main__":
             ac_successful = np_random_sampler(p_ac_success(args.N, i))
             # mark autocomplete valid
             ac_valid = True
+
+    return t
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+
+    if args.random_seed is not None:
+        NP_SEED = args.random_seed
+        np.random.seed(NP_SEED)
+    else:
+        NP_SEED = None
+
+    TARGET_WORD = args.target_word
+
+    t_final = simulate(args, suppress_output=False)
